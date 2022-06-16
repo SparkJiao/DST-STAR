@@ -1,25 +1,20 @@
 # import faulthandler
 # faulthandler.enable()
-import os
-import torch
-import torch.nn as nn
-import numpy as np
 import argparse
-import random
-import json
-import time
 import logging
-from tqdm import tqdm, trange
+import os
+import random
 
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, RandomSampler
+from tqdm import tqdm, trange
+from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import BertTokenizer
+
 from utils.data_utils import Processor, MultiWozDataset
 from utils.eval_utils import model_evaluation
 from utils.label_lookup import get_label_lookup_from_first_token, combine_slot_values
-from models.ModelBERT import UtteranceEncoding
-from models.ModelBERT import BeliefTracker
-
-from transformers import BertTokenizer
-from transformers import AdamW, get_cosine_schedule_with_warmup, get_linear_schedule_with_warmup
 
 # os.environ['CUDA_VISIBLE_DEVICES']='0'
 torch.cuda.set_device(0)
@@ -142,7 +137,7 @@ def main(args):
         batch_loss = []
         batch_acc = []
 
-        for step, batch in enumerate(tqdm(train_dataloader)):
+        for step, batch in enumerate(tqdm(train_dataloader, dynamic_ncols=True)):
             model.train()
 
             batch = [b.to(device) if b is not None else b for b in batch]
@@ -210,14 +205,14 @@ def main(args):
 
             logger.info(
                 "*** Epoch=%d, Last Update=%d, Dev Loss=%.6f, Dev Acc=%.6f, Dev Turn Acc=%.6f, Best Loss=%.6f, Best Acc=%.6f ***" % (
-                epoch, last_update, eval_res['loss'], eval_res['joint_acc'], eval_res['joint_turn_acc'], best_loss, best_acc))
+                    epoch, last_update, eval_res['loss'], eval_res['joint_acc'], eval_res['joint_turn_acc'], best_loss, best_acc))
 
         if (epoch + 1) % args.eval_epoch == 0:
             eval_res = model_evaluation(model, test_data_raw, tokenizer, slot_meta, label_list, epoch + 1)
 
             logger.info(
                 "*** Epoch=%d, Last Update=%d, Tes Loss=%.6f, Tes Acc=%.6f, Tes Turn Acc=%.6f, Best Loss=%.6f, Best Acc=%.6f ***" % (
-                epoch, last_update, eval_res['loss'], eval_res['joint_acc'], eval_res['joint_turn_acc'], best_loss, best_acc))
+                    epoch, last_update, eval_res['loss'], eval_res['joint_acc'], eval_res['joint_turn_acc'], best_loss, best_acc))
 
         if last_update + args.patience <= epoch:
             break
@@ -282,7 +277,23 @@ if __name__ == "__main__":
 
     parser.add_argument("--num_self_attention_layer", default=6, type=int)
 
+    # Added by Fangkai
+    parser.add_argument("--model_ver", default=1, type=int)
+    parser.add_argument("--value_sup", default=1.0, type=float)
+    parser.add_argument("--attn_rank", default="vvssss", type=str)
+    parser.add_argument("--remove_layer_norm", default=False, action='store_true')
+    parser.add_argument("--val_attn_residual", default=False, action='store_true')
+
     args = parser.parse_args()
+
+    if args.model_ver == 1:
+        from models.ModelBERT_cp import BeliefTracker
+        from models.ModelBERT_cp import UtteranceEncoding
+    elif args.model_ver == 2:
+        from models.ModelBERT_cp_v2 import BeliefTracker
+        from models.ModelBERT_cp_v2 import UtteranceEncoding
+    else:
+        raise ValueError("Invalid model version")
 
     print('pytorch version: ', torch.__version__)
     #     print(args)

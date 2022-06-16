@@ -5,6 +5,7 @@ from torch.utils.data import Dataset
 import torch
 import random
 import re
+from tqdm import tqdm
 import os
 from copy import deepcopy
 
@@ -77,7 +78,7 @@ class Processor(object):
         last_dialogue_state = {}
         history_uttr = []
         
-        for (i, line) in enumerate(lines):
+        for (i, line) in tqdm(enumerate(lines), total=len(lines)):
             dialogue_idx = line[0]
             turn_idx = int(line[1])
             is_last_turn = (line[2] == "True")

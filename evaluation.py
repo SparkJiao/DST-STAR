@@ -15,8 +15,10 @@ from torch.utils.data import TensorDataset, DataLoader, RandomSampler
 from utils.data_utils import Processor, MultiWozDataset
 from utils.generate_full_prediction import model_evaluation
 from utils.label_lookup import get_label_lookup_from_first_token, combine_slot_values
-from models.ModelBERT import UtteranceEncoding
-from models.ModelBERT import BeliefTracker
+# from models.ModelBERT import UtteranceEncoding
+# from models.ModelBERT import BeliefTracker
+from models.ModelBERT_cp import UtteranceEncoding
+from models.ModelBERT_cp import BeliefTracker
 
 from transformers import BertTokenizer
 
@@ -98,6 +100,10 @@ if __name__ == "__main__":
     parser.add_argument("--distance_metric", default="euclidean", type=str)
     
     parser.add_argument("--num_self_attention_layer", default=6, type=int)
+
+    # Added by Fangkai
+    parser.add_argument("--value_sup", default=1.0, type=float)
+    parser.add_argument("--attn_rank", default="vvssss", type=str)
     
     args = parser.parse_args()
     
