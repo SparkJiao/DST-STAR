@@ -283,6 +283,7 @@ if __name__ == "__main__":
     parser.add_argument("--attn_rank", default="vvssss", type=str)
     parser.add_argument("--remove_layer_norm", default=False, action='store_true')
     parser.add_argument("--val_attn_residual", default=False, action='store_true')
+    parser.add_argument("--enc_out_dropout", default=0.0, type=float)
 
     args = parser.parse_args()
 

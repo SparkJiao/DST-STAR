@@ -1,11 +1,14 @@
+import logging
+from copy import deepcopy
+
 import math
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from copy import deepcopy
 from torch.nn import CrossEntropyLoss
 from transformers import BertPreTrainedModel, BertModel
+
+logger = logging.getLogger(__name__)
 
 
 class UtteranceEncoding(BertPreTrainedModel):
@@ -303,7 +306,8 @@ class Decoder(nn.Module):
         print("Attention rank: {}".format(self.attn_rank))
 
         # slot utterance attention
-        self.slot_utter_attn = UtteranceAttention(self.attn_head, self.model_output_dim, dropout=0., attn_type=self.attn_type)
+        self.slot_utter_attn = UtteranceAttention(self.attn_head, self.model_output_dim, dropout=0.,
+                                                  attn_type=self.attn_type)
 
         # MLP
         self.SlotMLP = nn.Sequential(nn.Linear(self.model_output_dim * 2, self.model_output_dim),
@@ -322,7 +326,8 @@ class Decoder(nn.Module):
 
         # value copy
         slot_val_attn = Attention(self.model_output_dim, self.model_output_dim, dropout=0.0)
-        self.slot_val_attn = AttentionLayer(slot_val_attn, self.model_output_dim, self.dropout_prob, residual=args.val_attn_residual)
+        self.slot_val_attn = AttentionLayer(slot_val_attn, self.model_output_dim, self.dropout_prob,
+                                            residual=args.val_attn_residual)
 
         # prediction
         self.pred = nn.Sequential(nn.Dropout(p=self.dropout_prob),
@@ -353,7 +358,8 @@ class Decoder(nn.Module):
             num_slot_labels = hidden_label.size(0)  # number of value choices for each slot
 
             _hidden_label = hidden_label.unsqueeze(0).repeat(batch_size, 1, 1).reshape(batch_size * num_slot_labels, -1)
-            _hidden = hidden[:, s, :].unsqueeze(1).repeat(1, num_slot_labels, 1).reshape(batch_size * num_slot_labels, -1)
+            _hidden = hidden[:, s, :].unsqueeze(1).repeat(1, num_slot_labels, 1).reshape(batch_size * num_slot_labels,
+                                                                                         -1)
             _dist = self.metric(_hidden_label, _hidden).view(batch_size, num_slot_labels)
 
             if self.distance_metric == "euclidean":
@@ -420,7 +426,8 @@ class Decoder(nn.Module):
         for layer_id, layer in enumerate(self.slot_self_attn.layers):
             if self.attn_rank[layer_id] == 'v':
                 if filled_value is None:
-                    filled_value, value_filling_loss = self.slot_value_dot_matching(value_lookup, hidden_slot, target_slots, labels)
+                    filled_value, value_filling_loss = self.slot_value_dot_matching(value_lookup, hidden_slot,
+                                                                                    target_slots, labels)
                 hidden_slot = layer(hidden_slot, value=filled_value)
             elif self.attn_rank[layer_id] == 's':
                 hidden_slot = layer(hidden_slot)
@@ -449,6 +456,14 @@ class BeliefTracker(nn.Module):
         self.slot_lookup = slot_lookup
         self.value_lookup = value_lookup
 
+        enc_out_dropout = getattr(args, "enc_out_dropout", 0.0)
+        if enc_out_dropout > 0:
+            self.enc_out_dropout = nn.Dropout(enc_out_dropout)
+        else:
+            self.enc_out_dropout = lambda x: x
+
+        logger.info(f"encoder output dropout: {enc_out_dropout}")
+
         self.encoder = UtteranceEncoding.from_pretrained(self.args.pretrained_model)
         self.model_output_dim = self.encoder.config.hidden_size
         self.decoder = Decoder(args, self.model_output_dim, self.num_labels, self.slot_value_pos, device)
@@ -465,6 +480,9 @@ class BeliefTracker(nn.Module):
         # encoder, a pretrained model, output is a tuple
         sequence_output = self.encoder(input_ids, attention_mask, token_type_ids)[0]
 
+        # encoder dropout
+        sequence_output = self.enc_out_dropout(sequence_output)
+
         # decoder        
         loss, loss_slot, pred_slot = self.decoder(sequence_output, attention_mask,
                                                   labels, self.slot_lookup,
@@ -473,6 +491,7 @@ class BeliefTracker(nn.Module):
         # calculate accuracy
         accuracy = pred_slot == labels
         acc_slot = torch.true_divide(torch.sum(accuracy, 0).float(), batch_size).cpu().detach().numpy()  # slot accuracy
-        acc = torch.sum(torch.floor_divide(torch.sum(accuracy, 1), num_slots)).float().item() / batch_size  # joint accuracy
+        acc = torch.sum(
+            torch.floor_divide(torch.sum(accuracy, 1), num_slots)).float().item() / batch_size  # joint accuracy
 
         return loss, loss_slot, acc, acc_slot, pred_slot
